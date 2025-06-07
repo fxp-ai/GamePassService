@@ -15,6 +15,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         .package(url: "https://github.com/pultar/GamePassKit.git", branch: "main"),
         .package(url: "https://github.com/pultar/GamePassShared.git", branch: "main"),
+        .package(url: "https://github.com/twostraws/SwiftGD.git", from: "2.0.0"),
     ],
     targets: [
         .executableTarget(name: "GamePassService",
@@ -24,6 +25,7 @@ let package = Package(
                 .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "GamePassKit", package: "GamePassKit"),
                 .product(name: "GamePassShared", package: "GamePassShared"),
+                .product(name: "SwiftGD", package: "SwiftGD"),
             ],
             path: "Sources/App"
         ),

@@ -88,5 +88,8 @@ func buildRouter(
     // Webhook endpoints
     v1.addRoutes(WebhookController(crawlerService: crawlerService).endpoints, atPath: "/webhooks")
     
+    // Images
+    v1.addRoutes(ImageController(repository: gameRepository).endpoints, atPath: "/images")
+    
     return router
 }

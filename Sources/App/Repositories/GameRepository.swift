@@ -13,4 +13,5 @@ import GamePassShared
 protocol GameRepository: Sendable {
     func list(market: String?, collectionId: String?) async throws -> [String]
     func details(productIds: String, language: String, market: String, collectionId: String) async throws -> [GamePassGame]
+    func getImageUrl(productId: String, purpose: String, language: String) async throws -> String?
 }

@@ -192,5 +192,28 @@ struct GamePostgresRepository: GameRepository {
             )
         }
     }
+    
+    func getImageUrl(productId: String, purpose: String, language: String) async throws -> String? {
+            var bindings = PostgresBindings()
+            bindings.append(productId)
+            bindings.append(purpose)
+            bindings.append(language)
+            
+            let query = PostgresQuery(
+                unsafeSQL: """
+                    SELECT uri FROM game_images
+                    WHERE product_id = $1 AND image_purpose = $2 AND language = $3
+                    LIMIT 1
+                """,
+                binds: bindings
+            )
+            
+            let stream = try await client.query(query)
+            
+            for try await (uri) in stream.decode(String.self, context: .default) {
+                return uri
+            }
+            return nil
+        }
 
 }
