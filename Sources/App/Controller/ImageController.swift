@@ -8,6 +8,7 @@
 import Foundation
 import Hummingbird
 import PostgresNIO
+import SwiftGD
 
 struct ImageController<Repository: GameRepository> {
     let repository: Repository
@@ -33,23 +34,8 @@ struct ImageController<Repository: GameRepository> {
         let widthString = request.uri.queryParameters.get("width")
         let width = widthString.flatMap { Int($0) }
         
-        // Build cache key
-        let cacheKey = "\(productId)_\(purpose)_\(width ?? 0)"
-        
-        // Check cache
-        if let cachedData = cache.get(key: cacheKey) {
-            var buffer = ByteBuffer()
-            buffer.writeBytes(cachedData)
-            
-            return Response(
-                status: .ok,
-                headers: [
-                    .contentType: "image/jpeg",
-                    .cacheControl: "max-age=86400"
-                ],
-                body: ResponseBody(byteBuffer: buffer)
-            )
-        }
+        // Check cache first (without height since we don't know it yet)
+        // We'll need to check if any cached version exists for this width
         
         // Get original URL from database
         let imageUrl = try await repository.getImageUrl(productId: productId, purpose: purpose, language: language)
@@ -58,15 +44,55 @@ struct ImageController<Repository: GameRepository> {
             // Fetch from Microsoft
             let (imageData, _) = try await URLSession.shared.data(from: URL(string: "https:" + imageUrl)!)
             
-            // Process if width specified
-            let finalData = if let width = width {
-                try await resizeImage(data: imageData, toWidth: width)
+            // Get original dimensions to calculate height if resizing
+            var finalData = imageData
+            var finalWidth: Int? = nil
+            var finalHeight: Int? = nil
+            
+            if let width = width {
+                // Load image to get dimensions
+                let originalImage = try Image(data: imageData)
+                let aspectRatio = Double(originalImage.size.height) / Double(originalImage.size.width)
+                let height = Int(Double(width) * aspectRatio)
+                
+                // Check cache with proper dimensions
+                if let cachedData = cache.get(productId: productId, language: language, purpose: purpose, width: width, height: height) {
+                    var buffer = ByteBuffer()
+                    buffer.writeBytes(cachedData)
+                    
+                    return Response(
+                        status: .ok,
+                        headers: [
+                            .contentType: "image/jpeg",
+                            .cacheControl: "max-age=86400"
+                        ],
+                        body: ResponseBody(byteBuffer: buffer)
+                    )
+                }
+                
+                // Resize if not cached
+                finalData = try await resizeImage(data: imageData, toWidth: width)
+                finalWidth = width
+                finalHeight = height
             } else {
-                imageData
+                // Check cache for original
+                if let cachedData = cache.get(productId: productId, language: language, purpose: purpose, width: nil, height: nil) {
+                    var buffer = ByteBuffer()
+                    buffer.writeBytes(cachedData)
+                    
+                    return Response(
+                        status: .ok,
+                        headers: [
+                            .contentType: "image/jpeg",
+                            .cacheControl: "max-age=86400"
+                        ],
+                        body: ResponseBody(byteBuffer: buffer)
+                    )
+                }
             }
             
             // Cache and serve
-            cache.set(key: cacheKey, data: finalData)
+            cache.set(productId: productId, language: language, purpose: purpose, width: finalWidth, height: finalHeight, data: finalData)
             
             // Convert Data to ByteBuffer
             var buffer = ByteBuffer()

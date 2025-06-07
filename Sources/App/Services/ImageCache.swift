@@ -16,17 +16,34 @@ struct ImageCache {
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
     }
     
-    func path(for key: String) -> URL {
-        cacheDirectory.appendingPathComponent(key + ".jpg")
+    func path(for productId: String, language: String, purpose: String, width: Int?, height: Int?) -> URL {
+        // Create nested directory structure
+        let productDir = cacheDirectory.appendingPathComponent(productId)
+        let languageDir = productDir.appendingPathComponent(language)
+        
+        // Create filename
+        let filename: String
+        if let width = width, let height = height {
+            filename = "\(purpose)-\(width)x\(height).jpg"
+        } else {
+            filename = "\(purpose)-original.jpg"
+        }
+        
+        return languageDir.appendingPathComponent(filename)
     }
     
-    func get(key: String) -> Data? {
-        let url = path(for: key)
+    func get(productId: String, language: String, purpose: String, width: Int?, height: Int?) -> Data? {
+        let url = path(for: productId, language: language, purpose: purpose, width: width, height: height)
         return try? Data(contentsOf: url)
     }
     
-    func set(key: String, data: Data) {
-        let url = path(for: key)
+    func set(productId: String, language: String, purpose: String, width: Int?, height: Int?, data: Data) {
+        let url = path(for: productId, language: language, purpose: purpose, width: width, height: height)
+        
+        // Create directory structure if needed
+        let directory = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        
         try? data.write(to: url)
     }
 }
