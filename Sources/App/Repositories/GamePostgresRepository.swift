@@ -194,26 +194,44 @@ struct GamePostgresRepository: GameRepository {
     }
     
     func getImageUrl(productId: String, purpose: String, language: String) async throws -> String? {
-            var bindings = PostgresBindings()
-            bindings.append(productId)
+        var bindings = PostgresBindings()
+        bindings.append(productId)
+        bindings.append(language)
+        
+        var query: String
+        
+        // Check if this is a screenshot with position
+        if purpose.starts(with: "Screenshot_") {
+            // Split the combined purpose
+            let position = String(purpose.dropFirst(11)) // Remove "Screenshot_"
+            bindings.append("Screenshot")
+            bindings.append(position)
+            
+            query = """
+                SELECT uri FROM game_images
+                WHERE product_id = $1 AND language = $2 
+                AND image_purpose = $3 AND image_position_info = $4
+                LIMIT 1
+            """
+        } else {
+            // Normal query for other image types
             bindings.append(purpose)
-            bindings.append(language)
             
-            let query = PostgresQuery(
-                unsafeSQL: """
-                    SELECT uri FROM game_images
-                    WHERE product_id = $1 AND image_purpose = $2 AND language = $3
-                    LIMIT 1
-                """,
-                binds: bindings
-            )
-            
-            let stream = try await client.query(query)
-            
-            for try await (uri) in stream.decode(String.self, context: .default) {
-                return uri
-            }
-            return nil
+            query = """
+                SELECT uri FROM game_images
+                WHERE product_id = $1 AND language = $2 AND image_purpose = $3
+                LIMIT 1
+            """
         }
+        
+        let postgresQuery = PostgresQuery(unsafeSQL: query, binds: bindings)
+        let stream = try await client.query(postgresQuery)
+        
+        for try await (uri) in stream.decode(String.self, context: .default) {
+            return uri
+        }
+        
+        return nil
+    }
 
 }
