@@ -6,8 +6,7 @@
 //
 
 import Foundation
-import GamePassKit
-import GamePassShared
+import XboxKit
 import Hummingbird
 import Logging
 import PostgresNIO
@@ -55,7 +54,7 @@ struct GamePostgresRepository: GameRepository {
         return games
     }
     
-    func details(productIds: String, language: String, market: String, collectionId: String) async throws -> [GamePassGame] {
+    func details(productIds: String, language: String, market: String, collectionId: String) async throws -> [GamePassGameDetailsResponse] {
         let productIdArray = productIds.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         
         guard !productIdArray.isEmpty else {
@@ -118,8 +117,8 @@ struct GamePostgresRepository: GameRepository {
         let postgresQuery = PostgresQuery(unsafeSQL: query, binds: bindings)
         let stream = try await client.query(postgresQuery)
         
-        var gamesDict: [String: GamePassGame] = [:]
-        var imageDescriptorsDict: [String: [GamePassImageDescriptor]] = [:]
+        var gamesDict: [String: XboxGame] = [:]
+        var imageDescriptorsDict: [String: [XboxImageDescriptor]] = [:]
         var availabilityDict: [String: [Date]] = [:]
         
         for try await row in stream.decode(
@@ -138,7 +137,7 @@ struct GamePostgresRepository: GameRepository {
             
             // Create game object if not already created
             if gamesDict[productId] == nil {
-                gamesDict[productId] = GamePassGame(
+                gamesDict[productId] = XboxGame(
                     productId: productId,
                     productTitle: productTitle,
                     productDescription: productDescription,
@@ -147,8 +146,7 @@ struct GamePostgresRepository: GameRepository {
                     shortTitle: shortTitle,
                     sortTitle: sortTitle,
                     shortDescription: shortDescription,
-                    imageDescriptors: nil,
-                    availabilityHistory: nil
+                    imageDescriptors: nil
                 )
                 imageDescriptorsDict[productId] = []
                 // Store availability dates from first row
@@ -160,7 +158,7 @@ struct GamePostgresRepository: GameRepository {
                 let alreadyExists = imageDescriptorsDict[productId]?.contains { $0.fileId == fileId } ?? false
                 
                 if !alreadyExists {
-                    let imageDescriptor = GamePassImageDescriptor(
+                    let imageDescriptor = XboxImageDescriptor(
                         fileId: fileId,
                         height: height,
                         width: width,
@@ -178,7 +176,7 @@ struct GamePostgresRepository: GameRepository {
             let images = imageDescriptorsDict[productId] ?? []
             let availability = availabilityDict[productId] ?? []
             
-            return GamePassGame(
+            let game = XboxGame(
                 productId: game.productId,
                 productTitle: game.productTitle,
                 productDescription: game.productDescription,
@@ -187,9 +185,9 @@ struct GamePostgresRepository: GameRepository {
                 shortTitle: game.shortTitle,
                 sortTitle: game.sortTitle,
                 shortDescription: game.shortDescription,
-                imageDescriptors: images.isEmpty ? nil : images,
-                availabilityHistory: availability.isEmpty ? nil : availability
+                imageDescriptors: images,
             )
+            return GamePassGameDetailsResponse(game: game, availabilityHistory: availability)
         }
     }
     

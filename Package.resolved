@@ -1,5 +1,5 @@
 {
-  "originHash" : "233c40c7e8828c13d472e205e17e77d0adfcc1df29be24c714412cbc9b030a7a",
+  "originHash" : "b863c2355d297c0537a378f5053786f1d2fc32f14281a9bc4ad034b849488cb6",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -8,24 +8,6 @@
       "state" : {
         "revision" : "60235983163d040f343a489f7e2e77c1918a8bd9",
         "version" : "1.26.1"
-      }
-    },
-    {
-      "identity" : "gamepasskit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/pultar/GamePassKit.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "1e52b469fe40cc5d237f6e97de722ff0e6401206"
-      }
-    },
-    {
-      "identity" : "gamepassshared",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/pultar/GamePassShared.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "d75a0f008689d977729c83b4f999efa0d10f3e91"
       }
     },
     {
@@ -251,6 +233,15 @@
       "state" : {
         "revision" : "1960998971b453101e740f25bc6d9fb01e0ba225",
         "version" : "2.5.0"
+      }
+    },
+    {
+      "identity" : "xboxkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pultar/XboxKit.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "e6167a05990a5bad1d13acce8ce6c8a25d8641c8"
       }
     }
   ],

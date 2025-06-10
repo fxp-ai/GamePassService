@@ -7,7 +7,7 @@
 
 import Foundation
 import Logging
-import GamePassKit
+import XboxKit
 import PostgresNIO
 import Hummingbird
 
@@ -20,8 +20,8 @@ actor CrawlerService {
     private var currentTask: Task<Void, Error>?
     
     // Configuration
-    private let defaultLanguage = "en-us"
-    private let defaultMarket = "US"
+    private let defaultLanguage = Localization.language("en-us")!
+    private let defaultMarket = Localization.market("US")!
     private let collectionIds = [
         GamePassCatalog.kGamePassConsoleIdentifier, GamePassCatalog.kGamePassCoreIdentifier,
         GamePassCatalog.kGamePassStandardIdentifier, GamePassCatalog.kGamePassPcIdentifier,
@@ -100,7 +100,7 @@ actor CrawlerService {
             // Fetch game collections
             let games = try await withThrowingTaskGroup(of: [String].self) { fetchGroup in
                 for collectionId in collectionIds {
-                    for country in GamePassCatalog.supportedCountries {
+                    for market in Localization.markets {
                         fetchGroup.addTask {
                             // Check for cancellation
                             try Task.checkCancellation()
@@ -108,18 +108,18 @@ actor CrawlerService {
                             let gameCollection = try? await GamePassCatalog.fetchGameCollection(
                                 for: collectionId,
                                 language: self.defaultLanguage,
-                                market: country
+                                market: market
                             )
                             
                             if let gameCollection {
-                                self.logger.info("\(gameCollection.games.count) games found for \(collectionId) in \(country)")
+                                self.logger.info("\(gameCollection.gameIds.count) games found for \(collectionId) in \(market)")
                                 try await self.saveGameAvailibility(
                                     collectionId: collectionId,
-                                    gameIds: gameCollection.games,
-                                    market: country,
+                                    gameIds: gameCollection.gameIds,
+                                    market: market.isoCode,
                                     date: Date()
                                 )
-                                return gameCollection.games
+                                return gameCollection.gameIds
                             } else {
                                 return []
                             }
@@ -137,7 +137,7 @@ actor CrawlerService {
             
             // Fetch game details
             await withThrowingTaskGroup(of: Void.self) { fetchGroup in
-                for language in GamePassCatalog.supportedLanguages {
+                for language in Localization.languages {
                     fetchGroup.addTask {
                         // Check for cancellation
                         try Task.checkCancellation()
@@ -149,7 +149,7 @@ actor CrawlerService {
                             try Task.checkCancellation()
                             
                             self.logger.info(">>> Fetching game descriptions for \(language) - chunk \(index + 1)/\(chunks.count)")
-                            let gamesInfo = try await GamePassCatalog.fetchProductInformation(
+                            let gamesInfo = try await XboxMarketplace.fetchProductInformation(
                                 gameIds: chunk,
                                 language: language,
                                 market: self.defaultMarket
@@ -158,15 +158,15 @@ actor CrawlerService {
                             self.logger.info(">>> Saving game descriptions for \(language) - chunk \(index + 1)/\(chunks.count)")
                             try await self.saveGameDescriptions(
                                 games: gamesInfo,
-                                language: language,
-                                market: self.defaultMarket
+                                language: language.localeCode,
+                                market: self.defaultMarket.isoCode
                             )
                             
                             self.logger.info(">>> Saving game images for \(language) - chunk \(index + 1)/\(chunks.count)")
                             try await self.saveGameImages(
                                 games: gamesInfo,
-                                language: language,
-                                market: self.defaultMarket
+                                language: language.localeCode,
+                                market: self.defaultMarket.isoCode
                             )
                         }
                     }
@@ -192,7 +192,7 @@ actor CrawlerService {
         try await postgresClient.query(postgresQuery)
     }
     
-    private func saveGameDescriptions(games: [Game], language: String, market: String) async throws {
+    private func saveGameDescriptions(games: [XboxGame], language: String, market: String) async throws {
         let query = """
             INSERT INTO game_descriptions (product_id, language, product_title, product_description, developer_name, publisher_name, short_title, sort_title, short_description)
             SELECT unnest($1::text[]), $2, unnest($3::text[]), unnest($4::text[]), unnest($5::text[]), unnest($6::text[]), unnest($7::text[]), unnest($8::text[]), unnest($9::text[])
@@ -222,7 +222,7 @@ actor CrawlerService {
         try await postgresClient.query(postgresQuery)
     }
     
-    private func saveGameImages(games: [Game], language: String, market: String) async throws {
+    private func saveGameImages(games: [XboxGame], language: String, market: String) async throws {
         // Flatten games and their image descriptors
         var productIds: [String] = []
         var productTitles: [String] = []

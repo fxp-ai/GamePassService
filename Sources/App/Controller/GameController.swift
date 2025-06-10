@@ -7,7 +7,7 @@
 
 import Foundation
 import Hummingbird
-import GamePassShared
+import XboxKit
 
 struct GameController<Repository: GameRepository> {
     let repository: Repository
@@ -23,7 +23,7 @@ struct GameController<Repository: GameRepository> {
         return try await self.repository.list(market: market, collectionId: collectionId)
     }
     
-    @Sendable func details(request: Request, context: some RequestContext) async throws -> [GamePassGame] {
+    @Sendable func details(request: Request, context: some RequestContext) async throws -> [GamePassGameDetailsResponse] {
         let productIds = try context.parameters.require("productIds", as: String.self)
         let language = request.uri.queryParameters.get("language")
         let market = request.uri.queryParameters.get("market")
