@@ -54,85 +54,64 @@ struct GamePostgresRepository: GameRepository {
         return games
     }
     
-    func details(productIds: String, language: String, market: String, collectionId: String) async throws -> [GamePassGameDetailsResponse] {
+    func details(productIds: String, language: String) async throws -> [XboxGame] {
         let productIdArray = productIds.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         
         guard !productIdArray.isEmpty else {
             return []
         }
         
-        // Create placeholders for both IN clauses
-        let placeholders = (4...(3 + productIdArray.count)).map { "$\($0)" }.joined(separator: ", ")
+        // Create placeholders starting from $2
+        let placeholders = (2...(1 + productIdArray.count)).map { "$\($0)" }.joined(separator: ", ")
         
         let query = """
-            WITH game_data AS (
-                SELECT
-                    product_id,
-                    product_title,
-                    product_description,
-                    developer_name,
-                    publisher_name,
-                    short_title,
-                    sort_title,
-                    short_description
-                FROM game_descriptions
-                WHERE product_id IN (\(placeholders))
-                    AND language = $1
-            ),
-            availability_summary AS (
-                SELECT
-                    product_id,
-                    array_agg(DISTINCT DATE(available_at) ORDER BY DATE(available_at) DESC) as availability_dates
-                FROM game_availability
-                WHERE product_id IN (\(placeholders))
-                    AND market = $2
-                    AND collection_id = $3
-                GROUP BY product_id
-            )
             SELECT
-                gd.*,
+                gd.product_id,
+                gd.product_title,
+                gd.product_description,
+                gd.developer_name,
+                gd.publisher_name,
+                gd.short_title,
+                gd.sort_title,
+                gd.short_description,
                 gi.file_id,
                 gi.height,
                 gi.width,
                 gi.uri,
                 gi.image_purpose,
-                gi.image_position_info,
-                av.availability_dates
-            FROM game_data gd
+                gi.image_position_info
+            FROM game_descriptions gd
             LEFT JOIN game_images gi ON gd.product_id = gi.product_id AND gi.language = $1
-            LEFT JOIN availability_summary av ON gd.product_id = av.product_id
+            WHERE gd.product_id IN (\(placeholders))
+                AND gd.language = $1
             ORDER BY gd.product_id, gi.image_position_info, gi.image_purpose;
         """
         
         var bindings = PostgresBindings()
         bindings.append(language)       // $1
-        bindings.append(market)         // $2
-        bindings.append(collectionId)   // $3
         
-        // Add product IDs for both IN clauses
+        // Add product IDs starting from $2
         for productId in productIdArray {
             bindings.append(productId)
         }
-        
+    
         let postgresQuery = PostgresQuery(unsafeSQL: query, binds: bindings)
         let stream = try await client.query(postgresQuery)
         
         var gamesDict: [String: XboxGame] = [:]
         var imageDescriptorsDict: [String: [XboxImageDescriptor]] = [:]
-        var availabilityDict: [String: [Date]] = [:]
         
         for try await row in stream.decode(
             (
                 String, String, String?, String?, String?, String?, String?,
-                String?, String?, Int?, Int?, String?, String?, String?, [Date]?
+                String?, String?, Int?, Int?, String?, String?, String?
             ).self,
             context: .default
         ) {
             let (
                 productId, productTitle, productDescription, developerName,
                 publisherName, shortTitle, sortTitle, shortDescription,
-                fileId, height, width, uri, imagePurpose, imagePositionInfo,
-                availabilityDates
+                fileId, height, width, uri, imagePurpose, imagePositionInfo
             ) = row
             
             // Create game object if not already created
@@ -149,8 +128,6 @@ struct GamePostgresRepository: GameRepository {
                     imageDescriptors: nil
                 )
                 imageDescriptorsDict[productId] = []
-                // Store availability dates from first row
-                availabilityDict[productId] = availabilityDates ?? []
             }
             
             // Add image if present and not already added
@@ -174,9 +151,8 @@ struct GamePostgresRepository: GameRepository {
         // Convert to array with all data
         return gamesDict.map { (productId, game) in
             let images = imageDescriptorsDict[productId] ?? []
-            let availability = availabilityDict[productId] ?? []
             
-            let game = XboxGame(
+            return XboxGame(
                 productId: game.productId,
                 productTitle: game.productTitle,
                 productDescription: game.productDescription,
@@ -185,10 +161,90 @@ struct GamePostgresRepository: GameRepository {
                 shortTitle: game.shortTitle,
                 sortTitle: game.sortTitle,
                 shortDescription: game.shortDescription,
-                imageDescriptors: images,
+                imageDescriptors: images.isEmpty ? nil : images
             )
-            return GamePassGameDetailsResponse(game: game, availabilityHistory: availability)
         }
+        
+    }
+    
+    func availability(productIds: String, market: String, collectionId: String) async throws -> [String: [AvailabilityPeriod]] {
+        let productIdArray = productIds.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            
+        guard !productIdArray.isEmpty else {
+            return [:]  // Return empty dictionary instead of array
+        }
+        
+        let placeholders = (3...(2 + productIdArray.count)).map { "$\($0)" }.joined(separator: ", ")
+        
+        let query = """
+            SELECT
+                product_id,
+                DATE(available_at) as availability_date
+            FROM game_availability
+            WHERE product_id IN (\(placeholders))
+                AND market = $1
+                AND collection_id = $2
+            ORDER BY product_id, availability_date;
+        """
+        
+        var bindings = PostgresBindings()
+        bindings.append(market)         // $1
+        bindings.append(collectionId)   // $2
+        
+        for productId in productIdArray {
+            bindings.append(productId)  // $3 onwards
+        }
+        
+        let postgresQuery = PostgresQuery(unsafeSQL: query, binds: bindings)
+        let stream = try await client.query(postgresQuery)
+        
+        // Group dates by product
+        var productDates: [String: [Date]] = [:]
+        
+        for try await (productId, date) in stream.decode((String, Date).self, context: .default) {
+            productDates[productId, default: []].append(date)
+        }
+        
+        let today = Calendar.current.startOfDay(for: Date())
+        
+        // Build dictionary instead of array
+        var result: [String: [AvailabilityPeriod]] = [:]
+        
+        for productId in productIdArray {
+            guard let dates = productDates[productId], !dates.isEmpty else {
+                result[productId] = []  // Empty array for products with no availability
+                continue
+            }
+            
+            var availabilityPeriods: [AvailabilityPeriod] = []
+            var periodStart = dates[0]
+            var lastDate = dates[0]
+            
+            for i in 1..<dates.count {
+                let currentDate = dates[i]
+                let daysDiff = Calendar.current.dateComponents([.day], from: lastDate, to: currentDate).day ?? 0
+                
+                if daysDiff > 1 {
+                    // Gap found - close current period
+                    availabilityPeriods.append(AvailabilityPeriod(start: periodStart, end: lastDate))
+                    periodStart = currentDate
+                }
+                lastDate = currentDate
+            }
+            
+            // Handle the last period
+            if lastDate >= today {
+                // Still ongoing
+                availabilityPeriods.append(AvailabilityPeriod(start: periodStart, end: nil))
+            } else {
+                // Ended in the past
+                availabilityPeriods.append(AvailabilityPeriod(start: periodStart, end: lastDate))
+            }
+            
+            result[productId] = availabilityPeriods.sorted { $0.start < $1.start }
+        }
+        
+        return result
     }
     
     func getImageUrl(productId: String, purpose: String, language: String) async throws -> String? {

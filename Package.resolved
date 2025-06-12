@@ -1,5 +1,5 @@
 {
-  "originHash" : "b863c2355d297c0537a378f5053786f1d2fc32f14281a9bc4ad034b849488cb6",
+  "originHash" : "d6bbb53f59bff2e3e59ac6e6fedf844d9df30723671211dcac018817d54b5624",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -241,7 +241,7 @@
       "location" : "https://github.com/pultar/XboxKit.git",
       "state" : {
         "branch" : "main",
-        "revision" : "e6167a05990a5bad1d13acce8ce6c8a25d8641c8"
+        "revision" : "b2477709f8108f6e589e199fecb4524855a2c8c1"
       }
     }
   ],

@@ -14,7 +14,8 @@ struct GameController<Repository: GameRepository> {
     var endpoints: RouteCollection<AppRequestContext> {
         return RouteCollection(context: AppRequestContext.self)
             .get(use: self.list)
-            .get(":productIds", use: self.details)
+            .get("details", use: self.details)
+            .get("availability", use: self.availability)
     }
     
     @Sendable func list(request: Request, context: some RequestContext) async throws -> [String] {
@@ -23,12 +24,18 @@ struct GameController<Repository: GameRepository> {
         return try await self.repository.list(market: market, collectionId: collectionId)
     }
     
-    @Sendable func details(request: Request, context: some RequestContext) async throws -> [GamePassGameDetailsResponse] {
-        let productIds = try context.parameters.require("productIds", as: String.self)
+    @Sendable func details(request: Request, context: some RequestContext) async throws -> [XboxGame] {
+        let productIds = request.uri.queryParameters.get("productIds")
         let language = request.uri.queryParameters.get("language")
+        guard let productIds, let language else { throw HTTPError(.badRequest) }
+        return try await self.repository.details(productIds: productIds, language: language)
+    }
+    
+    @Sendable func availability(request: Request, context: some RequestContext) async throws -> [String: [AvailabilityPeriod]] {
+        let productIds = request.uri.queryParameters.get("productIds")
         let market = request.uri.queryParameters.get("market")
         let collectionId = request.uri.queryParameters.get("collectionId")
-        guard let language, let market, let collectionId else { throw HTTPError(.badRequest) }
-        return try await self.repository.details(productIds: productIds, language: language, market: market, collectionId: collectionId)
+        guard let productIds, let market, let collectionId else { throw HTTPError(.badRequest) }
+        return try await self.repository.availability(productIds: productIds, market: market, collectionId: collectionId)
     }
 }

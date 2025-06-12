@@ -11,6 +11,7 @@ import XboxKit
 
 protocol GameRepository: Sendable {
     func list(market: String?, collectionId: String?) async throws -> [String]
-    func details(productIds: String, language: String, market: String, collectionId: String) async throws -> [GamePassGameDetailsResponse]
+    func details(productIds: String, language: String) async throws -> [XboxGame]
+    func availability(productIds: String, market: String, collectionId: String) async throws -> [String: [AvailabilityPeriod]]
     func getImageUrl(productId: String, purpose: String, language: String) async throws -> String?
 }
