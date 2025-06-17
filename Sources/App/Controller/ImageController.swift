@@ -48,35 +48,44 @@ struct ImageController<Repository: GameRepository> {
             )
         }
         
-        // STEP 1: Check if we have the original image cached
-        if let originalCachedData = cache.get(productId: productId, language: language, purpose: purpose, width: nil, height: nil) {
-            // We have the original cached
-            
-            if let requestedWidth = requestedWidth {
-                // User wants a resized version
-                let originalImage = try Image(data: originalCachedData)
-                let aspectRatio = Double(originalImage.size.height) / Double(originalImage.size.width)
-                let calculatedHeight = Int(Double(requestedWidth) * aspectRatio)
-                
-                // Check if we have this specific size cached
-                if let resizedCachedData = cache.get(productId: productId, language: language, purpose: purpose, width: requestedWidth, height: calculatedHeight) {
-                    return createResponse(from: resizedCachedData)
-                }
-                
-                // We don't have this size cached, but we have the original - resize it
-                let resizedData = try await resizeImage(data: originalCachedData, toWidth: requestedWidth)
-                
-                // Cache the resized version
-                cache.set(productId: productId, language: language, purpose: purpose, width: requestedWidth, height: calculatedHeight, data: resizedData)
-                
-                return createResponse(from: resizedData)
-            } else {
-                // User wants original size, and we have it cached
-                return createResponse(from: originalCachedData)
+        // STEP 1: For original size (no width specified), check cache directly
+        if requestedWidth == nil {
+            if let cachedData = cache.get(productId: productId, language: language, purpose: purpose, width: nil, height: nil) {
+                return createResponse(from: cachedData)
             }
         }
         
-        // STEP 2: Not in cache, need to download
+        // STEP 2: For resized images, we have a problem - we don't know the height yet
+        // Let's check if we have ANY cached version by scanning the cache directory
+        // This is a bit hacky but works
+        if let requestedWidth = requestedWidth {
+            let productDir = cache.cacheDirectory
+                .appendingPathComponent(productId)
+                .appendingPathComponent(language)
+            
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: productDir.path) {
+                // Look for a file matching our pattern
+                let searchPattern = "\(purpose)-\(requestedWidth)x"
+                if let files = try? fileManager.contentsOfDirectory(atPath: productDir.path) {
+                    for file in files {
+                        if file.hasPrefix(searchPattern) && file.hasSuffix(".jpg") {
+                            // Found a cached file! Extract height from filename
+                            // Format: "BoxArt-180x270.jpg"
+                            let components = file.dropLast(4).split(separator: "x")
+                            if components.count == 2,
+                               let height = Int(components[1]) {
+                                if let cachedData = cache.get(productId: productId, language: language, purpose: purpose, width: requestedWidth, height: height) {
+                                    return createResponse(from: cachedData)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // STEP 3: Not in cache, need to download
         
         // First, try to get URL from database
         var imageUrl = try await repository.getImageUrl(productId: productId, purpose: purpose, language: language)
@@ -118,29 +127,31 @@ struct ImageController<Repository: GameRepository> {
             throw HTTPError(.notFound, message: "Image not found for product: \(productId), purpose: \(purpose)")
         }
         
-        // STEP 3: Download from Microsoft
+        // STEP 4: Download from Microsoft
         let fullUrl = URL(string: "https:" + imageUrl)!
         let (imageData, _) = try await URLSession.shared.data(from: fullUrl)
         
-        // Cache the original
-        cache.set(productId: productId, language: language, purpose: purpose, width: nil, height: nil, data: imageData)
+        // STEP 5: Process and cache ONLY the requested size
+        var finalData = imageData
+        var finalWidth: Int? = nil
+        var finalHeight: Int? = nil
         
-        // STEP 4: Handle resizing if needed
         if let requestedWidth = requestedWidth {
+            // Calculate dimensions and resize
             let originalImage = try Image(data: imageData)
             let aspectRatio = Double(originalImage.size.height) / Double(originalImage.size.width)
             let calculatedHeight = Int(Double(requestedWidth) * aspectRatio)
             
-            let resizedData = try await resizeImage(data: imageData, toWidth: requestedWidth)
-            
-            // Cache the resized version
-            cache.set(productId: productId, language: language, purpose: purpose, width: requestedWidth, height: calculatedHeight, data: resizedData)
-            
-            return createResponse(from: resizedData)
-        } else {
-            // Return original
-            return createResponse(from: imageData)
+            // Resize
+            finalData = try await resizeImage(data: imageData, toWidth: requestedWidth)
+            finalWidth = requestedWidth
+            finalHeight = calculatedHeight
         }
+        
+        // Cache ONLY the size that was requested
+        cache.set(productId: productId, language: language, purpose: purpose, width: finalWidth, height: finalHeight, data: finalData)
+        
+        return createResponse(from: finalData)
     }
     
 }
