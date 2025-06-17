@@ -18,6 +18,7 @@ struct ImageController<Repository: GameRepository> {
     var endpoints: RouteCollection<AppRequestContext> {
         RouteCollection(context: AppRequestContext.self)
             .get(":productId", use: serveImage)
+            .get("manifest", use: getManifest)
     }
     
     @Sendable func serveImage(request: Request, context: some RequestContext) async throws -> Response {
