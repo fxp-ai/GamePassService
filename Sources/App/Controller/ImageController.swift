@@ -9,6 +9,7 @@ import Foundation
 import Hummingbird
 import PostgresNIO
 import SwiftGD
+import XboxKit
 
 struct ImageController<Repository: GameRepository> {
     let repository: Repository
@@ -34,11 +35,40 @@ struct ImageController<Repository: GameRepository> {
         let widthString = request.uri.queryParameters.get("width")
         let width = widthString.flatMap { Int($0) }
         
-        // Check cache first (without height since we don't know it yet)
-        // We'll need to check if any cached version exists for this width
+        // Try database first
+        var imageUrl = try await repository.getImageUrl(productId: productId, purpose: purpose, language: language)
         
-        // Get original URL from database
-        let imageUrl = try await repository.getImageUrl(productId: productId, purpose: purpose, language: language)
+        // If not found, fetch from Xbox API
+        if imageUrl == nil {
+            guard let lang = Localization.language(language),
+                  let market = Localization.market("US") else {
+                throw HTTPError(.badRequest, message: "Invalid language or market")
+            }
+            
+            let games = try await XboxMarketplace.fetchProductInformation(
+                gameIds: [productId],
+                language: lang,
+                market: market
+            )
+            
+            if let game = games.first,
+               let descriptors = game.imageDescriptors {
+                
+                // Handle screenshot with position
+                if purpose.starts(with: "Screenshot_") {
+                    let position = String(purpose.dropFirst(11))
+                    imageUrl = descriptors.first { descriptor in
+                        descriptor.imagePurpose == "Screenshot" &&
+                        descriptor.imagePositionInfo == position
+                    }?.uri
+                } else {
+                    // Find the requested image type
+                    imageUrl = descriptors.first { descriptor in
+                        descriptor.imagePurpose == purpose
+                    }?.uri
+                }
+            }
+        }
         
         if let imageUrl {
             // Fetch from Microsoft
