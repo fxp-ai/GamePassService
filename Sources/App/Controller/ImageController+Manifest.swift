@@ -67,7 +67,7 @@ extension ImageController {
                     var foundChecksum: String? = nil
                     
                     for file in files {
-                        // Expected format: "BoxArt-180x270.jpg" or "Screenshot_0-828x466.jpg"
+                        // Expected format: "BoxArt-180x270.jpg" or "Screenshot-0-828x466.jpg"
                         guard file.hasSuffix(".jpg") else { continue }
                         
                         let nameWithoutExtension = String(file.dropLast(4))

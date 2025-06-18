@@ -18,6 +18,7 @@ actor CrawlerService {
     private var isRunning = false
     private var lastRunDate: Date?
     private var currentTask: Task<Void, Error>?
+    private let pythonMetadataServiceURL = "http://localhost:9090/crawl"
     
     // Configuration
     private let defaultLanguage = Localization.language("en-us")!
@@ -96,23 +97,30 @@ actor CrawlerService {
     private func performCrawl() async throws {
         logger.info("Starting Game Pass crawler...")
         
+        var gamesForMetadataCrawl: [[String: String]] = []
+        
+        // Capture these values to avoid concurrency issues
+        let capturedDefaultLanguage = self.defaultLanguage
+        let capturedDefaultMarket = self.defaultMarket
+        let capturedLogger = self.logger
+        
         try await withThrowingTaskGroup(of: Void.self) { taskGroup in
             // Fetch game collections
             let games = try await withThrowingTaskGroup(of: [String].self) { fetchGroup in
                 for collectionId in collectionIds {
                     for market in Localization.markets {
-                        fetchGroup.addTask {
+                        fetchGroup.addTask { [self] in
                             // Check for cancellation
                             try Task.checkCancellation()
                             
                             let gameCollection = try? await GamePassCatalog.fetchGameCollection(
                                 for: collectionId,
-                                language: self.defaultLanguage,
+                                language: capturedDefaultLanguage,
                                 market: market
                             )
                             
                             if let gameCollection {
-                                self.logger.info("\(gameCollection.gameIds.count) games found for \(collectionId) in \(market)")
+                                capturedLogger.info("\(gameCollection.gameIds.count) games found for \(collectionId) in \(market)")
                                 try await self.saveGameAvailibility(
                                     collectionId: collectionId,
                                     gameIds: gameCollection.gameIds,
@@ -136,11 +144,13 @@ actor CrawlerService {
             }
             
             // Fetch game details
-            await withThrowingTaskGroup(of: Void.self) { fetchGroup in
+            try await withThrowingTaskGroup(of: [[String: String]].self) { fetchGroup in
                 for language in Localization.languages {
-                    fetchGroup.addTask {
+                    fetchGroup.addTask { [self] in
                         // Check for cancellation
                         try Task.checkCancellation()
+                        
+                        var collectedGamesForLanguage: [[String: String]] = []
                         
                         // Chunk the games array into groups of 20
                         let chunks = games.chunked(into: 20)
@@ -148,30 +158,80 @@ actor CrawlerService {
                         for (index, chunk) in chunks.enumerated() {
                             try Task.checkCancellation()
                             
-                            self.logger.info(">>> Fetching game descriptions for \(language) - chunk \(index + 1)/\(chunks.count)")
+                            capturedLogger.info(">>> Fetching game descriptions for \(language) - chunk \(index + 1)/\(chunks.count)")
                             let gamesInfo = try await XboxMarketplace.fetchProductInformation(
                                 gameIds: chunk,
                                 language: language,
-                                market: self.defaultMarket
+                                market: capturedDefaultMarket
                             )
                             
-                            self.logger.info(">>> Saving game descriptions for \(language) - chunk \(index + 1)/\(chunks.count)")
+                            capturedLogger.info(">>> Saving game descriptions for \(language) - chunk \(index + 1)/\(chunks.count)")
                             try await self.saveGameDescriptions(
                                 games: gamesInfo,
                                 language: language.localeCode,
-                                market: self.defaultMarket.isoCode
+                                market: capturedDefaultMarket.isoCode
                             )
                             
-                            self.logger.info(">>> Saving game images for \(language) - chunk \(index + 1)/\(chunks.count)")
+                            // Collect games for Python metadata crawl if this is default language/market
+                            if language == capturedDefaultLanguage && capturedDefaultMarket == Localization.market("US")! {
+                                for game in gamesInfo {
+                                    collectedGamesForLanguage.append([
+                                        "productId": game.productId,
+                                        "productTitle": game.productTitle,
+                                        "shortTitle": game.shortTitle ?? "",
+                                        "sortTitle": game.sortTitle ?? ""
+                                    ])
+                                }
+                            }
+                            
+                            capturedLogger.info(">>> Saving game images for \(language) - chunk \(index + 1)/\(chunks.count)")
                             try await self.saveGameImages(
                                 games: gamesInfo,
                                 language: language.localeCode,
-                                market: self.defaultMarket.isoCode
+                                market: capturedDefaultMarket.isoCode
                             )
                         }
+                        
+                        return collectedGamesForLanguage
                     }
                 }
+                
+                // Collect games from all language tasks
+                for try await languageGames in fetchGroup {
+                    gamesForMetadataCrawl.append(contentsOf: languageGames)
+                }
             }
+        }
+        
+        // Trigger Python metadata crawl for default language/market games
+        if !gamesForMetadataCrawl.isEmpty {
+            logger.info("Triggering Python metadata crawl for \(gamesForMetadataCrawl.count) games")
+            await triggerPythonMetadataCrawl(games: gamesForMetadataCrawl)
+        }
+    }
+    
+    private func triggerPythonMetadataCrawl(games: [[String: String]]) async {
+        do {
+            let url = URL(string: pythonMetadataServiceURL)!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            let requestBody = ["games": games]
+            request.httpBody = try JSONEncoder().encode(requestBody)
+            
+            let (_, response) = try await URLSession.shared.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200 || httpResponse.statusCode == 202 {
+                logger.info("Successfully triggered Python metadata crawl")
+            } else {
+                logger.error("Python metadata crawl request failed")
+            }
+            
+        } catch {
+            logger.error("Failed to trigger Python metadata crawl: \(error)")
+            // Don't fail the main crawl if metadata crawl fails
         }
     }
     

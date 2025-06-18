@@ -255,9 +255,9 @@ struct GamePostgresRepository: GameRepository {
         var query: String
         
         // Check if this is a screenshot with position
-        if purpose.starts(with: "Screenshot_") {
+        if purpose.starts(with: "Screenshot-") {
             // Split the combined purpose
-            let position = String(purpose.dropFirst(11)) // Remove "Screenshot_"
+            let position = String(purpose.dropFirst(11)) // Remove "Screenshot-"
             bindings.append("Screenshot")
             bindings.append(position)
             

@@ -107,13 +107,16 @@ struct ImageController<Repository: GameRepository> {
             if let game = games.first,
                let descriptors = game.imageDescriptors {
                 
-                // Handle screenshot with position
-                if purpose.starts(with: "Screenshot_") {
-                    let position = String(purpose.dropFirst(11))
-                    imageUrl = descriptors.first { descriptor in
-                        descriptor.imagePurpose == "Screenshot" &&
-                        descriptor.imagePositionInfo == position
-                    }?.uri
+                if purpose.starts(with: "Screenshot-") {
+                    let components = purpose.dropFirst(11).split(separator: "-")
+                    if components.count >= 2 {
+                        // Reconstruct the original position (e.g., "Desktop/4")
+                        let position = "\(components[0])/\(components[1])"
+                        imageUrl = descriptors.first { descriptor in
+                            descriptor.imagePurpose == "Screenshot" &&
+                            descriptor.imagePositionInfo == position
+                        }?.uri
+                    }
                 } else {
                     // Find the requested image type
                     imageUrl = descriptors.first { descriptor in
