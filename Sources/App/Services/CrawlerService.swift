@@ -97,6 +97,8 @@ actor CrawlerService {
     private func performCrawl() async throws {
         logger.info("Starting Game Pass crawler...")
         
+        var gamesForMetadataCrawl: [[String: String]] = []
+        
         try await withThrowingTaskGroup(of: Void.self) { taskGroup in
             // Track markets that have games
             var marketsWithGames: Set<Market> = []
@@ -153,11 +155,12 @@ actor CrawlerService {
             logger.info("Required languages: \(requiredLanguages.map { $0.localeCode }) (\(requiredLanguages.count) out of \(Localization.languages.count) total)")
             
             // Phase 3: Fetch game details only for required languages
-            await withThrowingTaskGroup(of: Void.self) { fetchGroup in
+            try await withThrowingTaskGroup(of: [[String: String]].self) { fetchGroup in
                 for language in requiredLanguages {
                     fetchGroup.addTask {
                         try Task.checkCancellation()
                         
+                        var collectedGamesForLanguage: [[String: String]] = []
                         let chunks = games.chunked(into: 20)
                         
                         for (index, chunk) in chunks.enumerated() {
@@ -177,6 +180,18 @@ actor CrawlerService {
                                 market: self.defaultMarket.isoCode
                             )
                             
+                            // Collect games for Python metadata crawl if this is default language/market
+                            if language == self.defaultLanguage && self.defaultMarket == Localization.market("US")! {
+                                for game in gamesInfo {
+                                    collectedGamesForLanguage.append([
+                                        "productId": game.productId,
+                                        "productTitle": game.productTitle,
+                                        "shortTitle": game.shortTitle ?? "",
+                                        "sortTitle": game.sortTitle ?? ""
+                                    ])
+                                }
+                            }
+                            
                             self.logger.info(">>> Saving game images for \(language.localeCode) - chunk \(index + 1)/\(chunks.count)")
                             try await self.saveGameImages(
                                 games: gamesInfo,
@@ -184,9 +199,22 @@ actor CrawlerService {
                                 market: self.defaultMarket.isoCode
                             )
                         }
+                        
+                        return collectedGamesForLanguage
                     }
                 }
+                
+                // Collect games from all language tasks
+                for try await languageGames in fetchGroup {
+                    gamesForMetadataCrawl.append(contentsOf: languageGames)
+                }
             }
+        }
+        
+        // Trigger Python metadata crawl for default language/market games
+        if !gamesForMetadataCrawl.isEmpty {
+            logger.info("Triggering Python metadata crawl for \(gamesForMetadataCrawl.count) games")
+            await triggerPythonMetadataCrawl(games: gamesForMetadataCrawl)
         }
     }
     
