@@ -15,6 +15,103 @@ struct GamePostgresRepository: GameRepository {
 
     let client: PostgresClient
     let logger: Logger
+    
+    init(client: PostgresClient, logger: Logger) {
+        self.client = client
+        self.logger = logger
+    }
+    
+    func createTablesIfNeeded() async throws {
+        logger.info("Ensuring database tables exist...")
+        
+        // Game availability table
+        try await self.client.query(
+            """
+            CREATE TABLE IF NOT EXISTS game_availability (
+                id BIGSERIAL PRIMARY KEY,
+                collection_id VARCHAR(255) NOT NULL,
+                market VARCHAR(255) NOT NULL,
+                product_id VARCHAR(255) NOT NULL,
+                available_at TIMESTAMPTZ NOT NULL
+            );
+            """, logger: self.logger)
+            
+        // Game descriptions table
+        try await self.client.query(
+            """
+            CREATE TABLE IF NOT EXISTS game_descriptions (
+                id BIGSERIAL PRIMARY KEY,
+                product_id VARCHAR(255) NOT NULL,
+                language VARCHAR(255) NOT NULL,
+                product_title TEXT,
+                product_description TEXT,
+                developer_name TEXT,
+                publisher_name TEXT,
+                short_title TEXT,
+                sort_title TEXT,
+                short_description TEXT,
+
+                UNIQUE (product_id, language)
+            );
+            """, logger: self.logger)
+            
+        // Game images table
+        try await self.client.query(
+            """
+            CREATE TABLE IF NOT EXISTS game_images (
+                id BIGSERIAL PRIMARY KEY,
+                product_id VARCHAR(255) NOT NULL,
+                language VARCHAR(255) NOT NULL,
+                file_id VARCHAR(255) NOT NULL,
+                height INT,
+                width INT,
+                uri TEXT,
+                image_purpose TEXT,
+                image_position_info TEXT,
+
+                UNIQUE (product_id, file_id, language, image_purpose, image_position_info)
+            );
+            """, logger: self.logger)
+            
+        // Game IDs mapping table
+        try await self.client.query(
+            """
+            CREATE TABLE IF NOT EXISTS game_ids (
+                    product_id VARCHAR PRIMARY KEY,
+                    hltb_id INTEGER,
+                    steam_id INTEGER,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """, logger: self.logger)
+            
+        // HLTB data table
+        try await self.client.query(
+            """
+            CREATE TABLE IF NOT EXISTS hltb_data (
+                hltb_id          INTEGER PRIMARY KEY,
+                game_name        VARCHAR,
+                similarity_score FLOAT,
+                main_story       FLOAT,
+                main_extra       FLOAT,
+                completionist    FLOAT,
+                last_updated     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """, logger: self.logger)
+            
+        // Steam reviews table
+        try await self.client.query(
+            """
+            CREATE TABLE IF NOT EXISTS steam_reviews (
+                steam_id            INTEGER PRIMARY KEY,
+                all_time_percentage FLOAT,
+                recent_percentage   FLOAT,
+                total_reviews       INTEGER,
+                last_updated        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """, logger: self.logger)
+        
+        logger.info("Database tables verified/created successfully")
+    }
 
     func list(market: String?, collectionId: String?) async throws -> [String] {
         var games: [String] = []

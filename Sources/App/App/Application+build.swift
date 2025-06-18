@@ -32,7 +32,7 @@ public func buildApplication(_ arguments: some AppArguments) async throws -> som
     let dbHost = environment.get("DB_HOST") ?? "localhost"
     let dbUsername = environment.get("DB_USERNAME") ?? "fpultar"
     let dbPassword = environment.get("DB_PASSWORD") ?? "postgres"
-    let dbName = environment.get("DB_NAME") ?? "example"
+    let dbName = environment.get("DB_NAME") ?? "crawler"
     
     let postgresConfiguration = PostgresClient.Configuration(
         host: dbHost,
@@ -62,6 +62,9 @@ public func buildApplication(_ arguments: some AppArguments) async throws -> som
         logger: logger
     )
     app.addServices(postgresClient)
+    app.beforeServerStarts {
+        try await postgresGameRepository.createTablesIfNeeded()
+    }
     return app
 }
 

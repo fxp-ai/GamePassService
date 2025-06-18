@@ -47,21 +47,3 @@ struct WebhookController {
         return await crawlerService.getStatus()
     }
 }
-
-// Basic authentication middleware
-struct BasicAuthenticator: RouterMiddleware {
-    let validToken = ProcessInfo.processInfo.environment["WEBHOOK_AUTH_TOKEN"] ?? "your-secret-token"
-    
-    struct UnauthorizedError: ResponseEncodable {
-        let error: String
-    }
-    
-    func handle(_ request: Request, context: AppRequestContext, next: (Request, AppRequestContext) async throws -> Response) async throws -> Response {
-        guard let authHeader = request.headers[.authorization],
-              authHeader == "Bearer \(validToken)" else {
-            throw HTTPError(.unauthorized, message: "Unauthorized")
-        }
-        
-        return try await next(request, context)
-    }
-}
