@@ -176,9 +176,18 @@ struct GamePostgresRepository: GameRepository {
                 gi.width,
                 gi.uri,
                 gi.image_purpose,
-                gi.image_position_info
+                gi.image_position_info,
+                sr.all_time_percentage,
+                sr.recent_percentage,
+                sr.total_reviews,
+                hd.main_story,
+                hd.main_extra,
+                hd.completionist
             FROM game_descriptions gd
             LEFT JOIN game_images gi ON gd.product_id = gi.product_id AND gi.language = $1
+            LEFT JOIN game_ids gids ON gd.product_id = gids.product_id
+            LEFT JOIN steam_reviews sr ON gids.steam_id = sr.steam_id
+            LEFT JOIN hltb_data hd ON gids.hltb_id = hd.hltb_id
             WHERE gd.product_id IN (\(placeholders))
                 AND gd.language = $1
             ORDER BY gd.product_id, gi.image_position_info, gi.image_purpose;
@@ -191,24 +200,30 @@ struct GamePostgresRepository: GameRepository {
         for productId in productIdArray {
             bindings.append(productId)
         }
-    
+
         let postgresQuery = PostgresQuery(unsafeSQL: query, binds: bindings)
         let stream = try await client.query(postgresQuery)
         
         var gamesDict: [String: XboxGame] = [:]
         var imageDescriptorsDict: [String: [XboxImageDescriptor]] = [:]
+        var reviewsDict: [String: GameReview] = [:]
+        var playtimesDict: [String: GamePlayTime] = [:]
         
         for try await row in stream.decode(
             (
                 String, String, String?, String?, String?, String?, String?,
-                String?, String?, Int?, Int?, String?, String?, String?
+                String?, String?, Int?, Int?, String?, String?, String?,
+                Double?, Double?, Int?,     // Review data
+                Double?, Double?, Double?   // Playtime data
             ).self,
             context: .default
         ) {
             let (
                 productId, productTitle, productDescription, developerName,
                 publisherName, shortTitle, sortTitle, shortDescription,
-                fileId, height, width, uri, imagePurpose, imagePositionInfo
+                fileId, height, width, uri, imagePurpose, imagePositionInfo,
+                allTimePercentage, recentPercentage, totalReviews,
+                mainStory, mainExtra, completionist
             ) = row
             
             // Create game object if not already created
@@ -222,7 +237,9 @@ struct GamePostgresRepository: GameRepository {
                     shortTitle: shortTitle,
                     sortTitle: sortTitle,
                     shortDescription: shortDescription,
-                    imageDescriptors: nil
+                    imageDescriptors: nil,
+                    reviews: nil,
+                    playtimes: nil
                 )
                 imageDescriptorsDict[productId] = []
             }
@@ -243,11 +260,31 @@ struct GamePostgresRepository: GameRepository {
                     imageDescriptorsDict[productId]?.append(imageDescriptor)
                 }
             }
+            
+            // Add review data if present and not already added
+            if reviewsDict[productId] == nil && (allTimePercentage != nil || recentPercentage != nil) {
+                reviewsDict[productId] = GameReview(
+                    score: allTimePercentage,
+                    recentScore: recentPercentage,
+                    totalReviews: totalReviews
+                )
+            }
+            
+            // Add playtime data if present and not already added
+            if playtimesDict[productId] == nil && (mainStory != nil || mainExtra != nil || completionist != nil) {
+                playtimesDict[productId] = GamePlayTime(
+                    mainStory: mainStory,
+                    mainPlusExtras: mainExtra,
+                    completionist: completionist
+                )
+            }
         }
         
         // Convert to array with all data
         return gamesDict.map { (productId, game) in
             let images = imageDescriptorsDict[productId] ?? []
+            let reviews = reviewsDict[productId]
+            let playtimes = playtimesDict[productId]
             
             return XboxGame(
                 productId: game.productId,
@@ -258,10 +295,11 @@ struct GamePostgresRepository: GameRepository {
                 shortTitle: game.shortTitle,
                 sortTitle: game.sortTitle,
                 shortDescription: game.shortDescription,
-                imageDescriptors: images.isEmpty ? nil : images
+                imageDescriptors: images.isEmpty ? nil : images,
+                reviews: reviews,
+                playtimes: playtimes
             )
         }
-        
     }
     
     func availability(productIds: String, market: String, collectionId: String) async throws -> [String: [AvailabilityPeriod]] {
