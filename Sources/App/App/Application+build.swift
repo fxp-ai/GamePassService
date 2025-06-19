@@ -29,7 +29,7 @@ public func buildApplication(_ arguments: some AppArguments) async throws -> som
     }()
     
     // Database configuration from environment or defaults
-    let dbHost = environment.get("DB_HOST") ?? "localhost"
+    let dbHost = environment.get("DB_HOST") ?? "postgres"
     let dbUsername = environment.get("DB_USERNAME") ?? "postgres"
     let dbPassword = environment.get("DB_PASSWORD") ?? "postgres"
     let dbName = environment.get("DB_NAME") ?? "postgres"
