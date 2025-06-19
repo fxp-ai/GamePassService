@@ -1,5 +1,5 @@
 {
-  "originHash" : "d6bbb53f59bff2e3e59ac6e6fedf844d9df30723671211dcac018817d54b5624",
+  "originHash" : "91d3bf0d6ecacf0651c86b0adcd6d6bf46a21cc0c9660d09934166072a322ccb",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-distributed-tracing.git",
       "state" : {
-        "revision" : "a64a0abc2530f767af15dd88dda7f64d5f1ff9de",
-        "version" : "1.2.0"
+        "revision" : "b78796709d243d5438b36e74ce3c5ec2d2ece4d8",
+        "version" : "1.2.1"
       }
     },
     {
@@ -177,8 +177,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-nio-ssl.git",
       "state" : {
-        "revision" : "4b38f35946d00d8f6176fe58f96d83aba64b36c7",
-        "version" : "2.31.0"
+        "revision" : "36b48956eb6c0569215dc15a587b491d2bb36122",
+        "version" : "2.32.0"
       }
     },
     {
@@ -231,8 +231,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/twostraws/SwiftGD.git",
       "state" : {
-        "revision" : "1960998971b453101e740f25bc6d9fb01e0ba225",
-        "version" : "2.5.0"
+        "branch" : "main",
+        "revision" : "07650dcb343d5b045598459fd3aad0936e0259bf"
       }
     },
     {
@@ -241,7 +241,7 @@
       "location" : "https://github.com/pultar/XboxKit.git",
       "state" : {
         "branch" : "main",
-        "revision" : "b97ffc93f9223e01cdfca0799d1bf9c9ae015282"
+        "revision" : "12703f0a2207c5e167c69068534cc79a503add60"
       }
     }
   ],

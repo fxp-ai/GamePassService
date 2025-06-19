@@ -7,7 +7,7 @@ FROM swift:6.1-noble AS build
 RUN export DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true \
     && apt-get -q update \
     && apt-get -q dist-upgrade -y \
-    && apt-get install -y libjemalloc-dev \
+    && apt-get install -y libjemalloc-dev libgd-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up a build area
@@ -58,10 +58,8 @@ RUN export DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true \
       libjemalloc2 \
       ca-certificates \
       tzdata \
-# If your app or its dependencies import FoundationNetworking, also install `libcurl4`.
-      # libcurl4 \
-# If your app or its dependencies import FoundationXML, also install `libxml2`.
-      # libxml2 \
+      libgd-dev \
+      libcurl4 \
     && rm -r /var/lib/apt/lists/*
 
 # Create a hummingbird user and group with /app as its home directory
