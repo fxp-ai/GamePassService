@@ -14,7 +14,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.21.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         .package(url: "https://github.com/pultar/XboxKit.git", branch: "main"),
-        .package(url: "https://github.com/twostraws/SwiftGD.git", from: "2.0.0"),
+        .package(url: "https://github.com/twostraws/SwiftGD.git", branch: "main"),
     ],
     targets: [
         .executableTarget(name: "GamePassService",
