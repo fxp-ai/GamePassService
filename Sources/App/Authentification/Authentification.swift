@@ -9,7 +9,7 @@ import Foundation
 import Hummingbird
 
 struct BasicAuthenticator: RouterMiddleware {
-    let validToken = ProcessInfo.processInfo.environment["WEBHOOK_AUTH_TOKEN"] ?? "your-secret-token"
+    let validToken = ProcessInfo.processInfo.environment["WEBHOOK_AUTH_TOKEN"] ?? "4EC45B02-1771-4D13-867D-2622A5B2EFAA"
     
     struct UnauthorizedError: ResponseEncodable {
         let error: String

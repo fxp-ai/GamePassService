@@ -17,6 +17,7 @@ struct ImageController<Repository: GameRepository> {
     
     var endpoints: RouteCollection<AppRequestContext> {
         RouteCollection(context: AppRequestContext.self)
+            .add(middleware: BasicAuthenticator())
             .get(":productId", use: serveImage)
             .get("manifest", use: getManifest)
     }

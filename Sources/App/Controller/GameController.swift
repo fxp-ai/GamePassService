@@ -13,6 +13,7 @@ struct GameController<Repository: GameRepository> {
     let repository: Repository
     var endpoints: RouteCollection<AppRequestContext> {
         return RouteCollection(context: AppRequestContext.self)
+            .add(middleware: BasicAuthenticator())
             .get(use: self.list)
             .get("details", use: self.details)
             .get("availability", use: self.availability)
