@@ -1,6 +1,3 @@
-# This workflow will build a Swift project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-swift
-
 name: Swift
 
 on:
@@ -21,5 +18,9 @@ jobs:
     steps:
     
     - uses: actions/checkout@v4
-    - name: Build
+    - name: Build for Linux
+      if: matrix.os == 'Linux'
       run: swift build -c release --product "GamePassService" --static-swift-stdlib -Xlinker -ljemalloc
+    - name: Build for macOS
+      if: matrix.os == 'macOS'
+      run: swift build -c release --product "GamePassService" -Xlinker -ljemalloc
